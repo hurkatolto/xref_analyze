@@ -1,0 +1,14 @@
+## Regexps for filtering out lines from dialyzer's output.
+## Example:
+## ^cc_snm.erl:.+never.+$
+
+## Begin and finishing lines of dialyzer output:
+Checking whether the PLT.+
+Proceeding with analysis.+
+
+## Dialyzer related lines:
+^ done in .+
+^done.+warnings were.+
+
+## Coming from leex
+^leexinc.hrl.+Function .+ will never.+

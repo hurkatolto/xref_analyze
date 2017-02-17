@@ -1,0 +1,12 @@
+{application, xref_analyze,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { xref_analyze_app, []}},
+  {env, []}
+ ]}.

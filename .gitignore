@@ -1,0 +1,10 @@
+*.beam
+.*.swp
+src/.*.swp
+xref_analyze
+.dialyzer_plt
+.eunit
+.rebar/
+tags
+ebin/xref_analyze.app
+erltags
