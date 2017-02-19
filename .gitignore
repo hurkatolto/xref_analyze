@@ -8,3 +8,7 @@ xref_analyze
 tags
 ebin/xref_analyze.app
 erltags
+ebin/xref_*.gv
+ebin/xref_*.png
+ebin/xref_*.txt
+src/proba.erl

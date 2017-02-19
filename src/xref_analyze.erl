@@ -3,23 +3,20 @@
 %%% ---------------------------------------------------------------------------
 -module(xref_analyze).
 
+-export([main/1]).
 
--export([analyze/3,
-         analyze/4,
-         is_direct_message_sending/2,
-         is_pure/2,
-         analyze_cbe_mods/1,
-         analyze_cbe_mods/2,
-         analyze_cbe_mods/3,
-         analyze_cbe/1,
-         analyze_cbe/2,
-         analyze_cbe/3,
+-export([analyze_mods/2,
+         analyze_mods/3,
+         analyze_code/3,
+         analyze_code/4,
+         analyze/3,
          analyze_all_modules/2,
          analyze_all_modules/3,
          analyze_all/2,
          analyze_all/3,
-         get_abstract_code/1,
-         get_deps/1]).
+         get_deps/1,
+         get_dep_modules/2]).
+
 
 -type opts() :: list(include_sub | highlight_pure_functions | generate_clusters | use_multiple_lines).
 
@@ -49,40 +46,47 @@
 %%% ---------------------------------------------------------------------------
 %%% API
 %%% ---------------------------------------------------------------------------
--spec analyze_cbe_mods(Modules :: list(module())) -> ok.
-analyze_cbe_mods(Modules) ->
-    analyze_cbe(lists:flatten(get_all_exported(Modules))).
 
--spec analyze_cbe_mods(OutFileName :: string(), Modules :: list(module())) -> ok.
-analyze_cbe_mods(OutFileName, Modules) ->
-    analyze_cbe(OutFileName, lists:flatten(get_all_exported(Modules))).
+main(ModNames) ->
+    {Dirs, Mods} = get_dirs_and_mods(ModNames),
+    io:format("~p ~p {Dirs, Mods}: '~p' ~n", [?MODULE, ?LINE, {Dirs, Mods}]),
+    Res = [code:add_pathz(Dir) || Dir <- Dirs],
+    analyze_mods("xref_analyze", Mods, [{use_multiple_lines, true}]).
 
--spec analyze_cbe_mods(
+-spec analyze_mods(Modules :: list(module())) -> ok.
+analyze_mods(Modules) ->
+    analyze_code(lists:flatten(get_all_exported(Modules)), Modules).
+
+-spec analyze_mods(OutFileName :: string(), Modules :: list(module())) -> ok.
+analyze_mods(OutFileName, Modules) ->
+    analyze_code(OutFileName, lists:flatten(get_all_exported(Modules)), Modules).
+
+-spec analyze_mods(
     OutFileName :: string(),
     Modules :: list(module()),
     Opts :: opts()
 ) -> ok.
-analyze_cbe_mods(OutFileName, Modules, Opts) ->
-    analyze_cbe(OutFileName, lists:flatten(get_all_exported(Modules)), Opts).
+analyze_mods(OutFileName, Modules, Opts) ->
+    analyze_code(OutFileName, lists:flatten(get_all_exported(Modules)), Opts, Modules).
 
--spec analyze_cbe(Entries :: list(mfa())) -> ok.
-analyze_cbe(Entries) ->
-    analyze(cbe_mods(), ?DEFAULT_OUTPUT, Entries, ?DEF_OPTS).
+-spec analyze_code(Entries :: list(mfa()), Mods :: list(atom())) -> ok.
+analyze_code(Entries, Modules) ->
+    analyze(Modules, ?DEFAULT_OUTPUT, Entries, ?DEF_OPTS).
 
--spec analyze_cbe(OutFileName :: string(), Entries :: list(mfa())) ->
+-spec analyze_code(OutFileName :: string(), Entries :: list(mfa()), Modules :: [atom()]) ->
     ok.
-analyze_cbe(OutFileName, Entries) ->
-    analyze(cbe_mods(), OutFileName, Entries, ?DEF_OPTS).
+analyze_code(OutFileName, Entries, Modules) ->
+    analyze(Modules, OutFileName, Entries, ?DEF_OPTS).
 
--spec analyze_cbe(
+-spec analyze_code(
     OutFileName :: string(),
     Entries :: list(mfa()),
-    Opts :: opts()
+    Opts :: opts(),
+    Modules :: list(atom())
 ) ->  ok.
-analyze_cbe(OutFileName, Entries, Opts) ->
-    analyze(cbe_mods(), OutFileName, Entries, Opts).
+analyze_code(OutFileName, Entries, Opts, Modules) ->
+    analyze(Modules, OutFileName, Entries, Opts).
 
-% xref_analyze:analyze([cbe_openbet_puller, cbe_sqlserver_cache_connector], "ahoj.txt", [{cbe_openbet_puller, get_user, 2}], [include_sub]).
 analyze(Modules, OutFileName, Entries) ->
     analyze(Modules, OutFileName, Entries, []).
 
@@ -119,20 +123,16 @@ get_dep_modules([Module | T], Path) ->
             [Module] ++ get_dep_modules(T, Path)
     end.
 
-
 analyze(Modules, OutFileName, Entries, Opts) ->
     xref:start(s),
     xref:set_default(s, [{verbose, false}, {warnings, false}]),
     [xref:add_module(s, M) || M <- Modules],
     Highlight = lists:member(highlight_pure_functions, Opts),
-    CallGraphs = [{highlight(Entry, Highlight, Modules), walk_call_graph(Entry, Modules, Opts, [])} || Entry <- Entries],
-    io:format("~p ~p CallGraphs: '~p' ~n", [?MODULE, ?LINE, CallGraphs]),
+    CallGraphs0 = [{highlight(Entry, Highlight, Modules), walk_call_graph(Entry, Modules, Opts, [])} || Entry <- Entries],
+    {_, CallGraphs} = delete_duplicates(undefined, CallGraphs0, [], []),
     PureFunctionsRepr = lists:flatten(render_pure_functions(CallGraphs)),
-    io:format("~p ~p PureFunctionsRepr: '~p' ~n", [?MODULE, ?LINE, PureFunctionsRepr]),
     ClusterRepr = lists:flatten(generate_clusters(CallGraphs, Opts, Modules)),
-    io:format("~p ~p ClusterRepr: '~p' ~n", [?MODULE, ?LINE, ClusterRepr]),
     DotRepr = lists:flatten(generate_dot_repr(CallGraphs)),
-    io:format("~p ~p DotRepr: '~p' ~n", [?MODULE, ?LINE, DotRepr]),
     Output =
         "digraph G {\n" ++ ClusterRepr ++ PureFunctionsRepr ++ DotRepr ++ "\n}",
     generate_dot_output(OutFileName, Output),
@@ -168,13 +168,11 @@ walk_call_graph(MFAs, Modules, Opts, CallPath) ->
     UseMultipleLines = lists:member(use_multiple_lines, Opts),
     case UseMultipleLines of
         true ->
-            io:format("~p ~p true: '~p' ~n", [?MODULE, ?LINE, true]),
             Res;
         false ->
-            io:format("~p ~p false: '~p' ~n", [?MODULE, ?LINE, false]),
-            lists:usort(Res)
+            Result = lists:usort(Res),
+            Result
     end.
-
 
 highlight(Function, false = _Highlight, _Modules) ->
     {Function, false};
@@ -302,8 +300,11 @@ generate_dot_output(OutFile0, Output) ->
 
 generate_ps_file(OutFile) ->
     GvName = OutFile ++ ".gv",
-    PsName = OutFile ++ ".ps",
-    Res = os:cmd("dot -Tps " ++ GvName ++ " -o " ++ PsName),
+    PsName = OutFile ++ ".png",
+    Cmd = "dot -x -Tpng  -Gratio=auto -Gdpi=340 " ++ GvName ++ " -o " ++ PsName,
+    io:format("~p ~p Cmd: '~p' ~n", [?MODULE, ?LINE, Cmd]),
+    Res = os:cmd(Cmd),
+    io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res]),
     Res.
 
 try_show_ps_file(OutFile) ->
@@ -372,28 +373,33 @@ get_all_exported(Modules) ->
 get_mod_functions(Mod) ->
     [{Mod, F, A} || {F, A} <- Mod:module_info(exports)].
 
-cbe_mods() -> [
-    cbe_addn_lines_srv,cbe_api,cbe_app,cbe_asian_market_checks,
-    cbe_asian_markets,cbe_basketball,cbe_bet_combinations_utils,
-    cbe_bet,cbe_bet_explode,cbe_bet_receiver,cbe_bets,
-    cbe_charts2,cbe_charts,cbe_close_bet_utils,cbe_combinations,
-    cbe_config,cbe_config_feed_handler,cbe_config_server,
-    cbe_config_worker,cbe_currency_receiver,cbe_data,
-    cbe_datastore,cbe_dispatcher,cbe_dist,cbe_distribution,
-    cbe_distributor,cbe_exclusion_receiver,cbe_expiration,
-    cbe_feed_server,cbe_flags,cbe_golden_check,cbe_golden_odds,
-    cbe_icl,cbe_mapred,cbe_market_feed_handler,
-    cbe_market_server,cbe_market_server_sup,
-    cbe_markup_feed_handler,cbe_markup_worker,
-    cbe_openbet_puller,cbe_pc_feed_handler,cbe_pc_processor,
-    cbe_price,cbe_pub_commands,cbe_pub_encoder,cbe_pull_client,
-    cbe_pull_client_pb,cbe_reciprocal,cbe_rest,
-    cbe_rest_test_receiver,cbe_sender,cbe_sender_sup,
-    cbe_sqlserver_cache_connector,cbe_sqlxml_parser,
-    cbe_status_feed_handler,cbe_sup,cbe_testing_records,
-    cbe_translate,cbe_user_data_worker,cbe_user, stats_server,
-    stats_accumulator,
-    cbe_user_process2,cbe_user_process,cbe_user_process_sup,
-    cbe_user_utils,cbe_worker_sup,fprof_up,xref_analyze
-].
+-spec get_dirs_and_mods(Names :: list(string())) ->
+    {Dirs :: list(string()), Mods :: list(atom())}.
+get_dirs_and_mods(Names) ->
+    get_dirs_and_mods(Names, [], []).
 
+-spec get_dirs_and_mods(Names, DirsAcc, ModsAcc) -> Res when
+      Names :: list(string()),
+      DirsAcc :: list(string()),
+      ModsAcc :: list(atom()),
+      Res :: {list(string()), list(atom())}.
+get_dirs_and_mods([], DirsAcc, ModsAcc) ->
+    {DirsAcc, ModsAcc};
+get_dirs_and_mods([Name | T], DirsAcc, ModsAcc) ->
+    Dir = filename:dirname(Name),
+    [Name2 | _] = lists:reverse(string:tokens(Name, "/")),
+    [Name3 | _] = string:tokens(Name2, "."),
+    get_dirs_and_mods(T, [Dir | DirsAcc], [list_to_atom(Name3) | ModsAcc]).
+
+delete_duplicates(_Prev, [], DrawnEdges, Res) ->
+    {DrawnEdges, Res};
+delete_duplicates(Prev, [{{Edge, IsPure}, Edges}  | T], DrawnEdges0, Res) ->
+    DrawnEdges = [{Prev, Edge} | DrawnEdges0],
+    case lists:member({Prev, Edge}, DrawnEdges0) of
+        false ->
+            {DrawnEdges1, Result} = delete_duplicates(Edge, Edges, DrawnEdges, []),
+            NewRes = [{{Edge, IsPure}, Result} | Res],
+            delete_duplicates(Prev, T, DrawnEdges1, NewRes);
+        true ->
+            delete_duplicates(Prev, T, DrawnEdges, Res)
+    end.
