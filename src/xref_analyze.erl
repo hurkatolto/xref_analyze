@@ -19,7 +19,7 @@
          get_dep_modules/2]).
 
 
--type option_key() :: include_sub | highlight_pure_functions | generate_clusters | use_multiple_lines.
+-type option_key() :: include_sub | highlight_pure_functions | generate_clusters.
 -type option() :: {option_key(), term()}.
 -type options() :: list(option()).
 
@@ -53,8 +53,8 @@
 main(ModNames) ->
     {Dirs, Mods} = get_dirs_and_mods(ModNames),
     io:format("~p ~p {Dirs, Mods}: '~p' ~n", [?MODULE, ?LINE, {Dirs, Mods}]),
-    Res = [code:add_pathz(Dir) || Dir <- Dirs],
-    analyze_mods("xref_analyze", Mods, [{use_multiple_lines, true}]).
+    [code:add_pathz(Dir) || Dir <- Dirs],
+    analyze_mods("xref_analyze", Mods, []).
 
 -spec analyze_mods(Modules :: list(module())) -> string().
 analyze_mods(Modules) ->
@@ -140,7 +140,7 @@ analyze(Modules, OutFileName, Entries, Opts) ->
         "digraph G {\n" ++ ClusterRepr ++ PureFunctionsRepr ++ DotRepr ++ "\n}",
     generate_dot_output(OutFileName, Output),
     generate_ps_file(OutFileName),
-    generate_tree_file(CallGraphs, OutFileName),
+    generate_tree_file(CallGraphs0, OutFileName),
     try_show_ps_file(OutFileName).
 
 %%% ---------------------------------------------------------------------------
@@ -168,14 +168,7 @@ walk_call_graph(MFAs, Modules, Opts, CallPath) ->
                         Acc
                 end
             end, [], Functions),
-    UseMultipleLines = lists:member(use_multiple_lines, Opts),
-    case UseMultipleLines of
-        true ->
-            Res;
-        false ->
-            Result = lists:usort(Res),
-            Result
-    end.
+    Res.
 
 highlight(Function, false = _Highlight, _Modules) ->
     {Function, false};
