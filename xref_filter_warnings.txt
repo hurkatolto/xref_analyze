@@ -2,25 +2,18 @@
 ## Example:
 ## ^cc_snm.erl:.+never.+$
 
-==> erlshell.+
-erlshell.erl.+main/1 is unused export.+
-erlshell.erl.+exec_line/1 is unused export.+
-
-erlshell_lexer:format_error/1 is unused export.+
-erlshell_lexer:string/2 is unused export.+
-erlshell_lexer:token/2 is unused export.+
-erlshell_lexer:token/3 is unused export.+
-erlshell_lexer:tokens/2 is unused export.+
-erlshell_lexer:tokens/3 is unused export.+
-
-erlshell_parser:format_error/1 is unused export.+
-erlshell_parser:parse_and_scan/1 is unused export.+
-erlshell_parser:sqrt/1 is unused export.+
-
-## shell_default is not directly called from the code
-shell_default.erl:.* Warning: shell_default:.+ is unused export.+
-
-## Called only from test
-.*erlshell.erl:.+Warning: erlshell:exec_line/3 is unused export.*
-.*erlshell.erl:.+Warning: erlshell:get_commands/1 is unused export.*
-.*es_utils.erl:.+Warning:.*es_utils:exception/2 is unused export.*
+==> xref_analyze.*
+src/proba.erl:.+: Warning: proba:function/0 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze/3 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_all/2 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_all/3 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_all_modules/2 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_all_modules/3 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_code/3 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_code/4 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_mods/1 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_mods/2 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_mods/3 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:get_dep_modules/2 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:get_deps/1 is unused export.*
+src/xref_analyze.erl:.+: Warning: xref_analyze:main/1 is unused export.*

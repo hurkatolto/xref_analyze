@@ -5,6 +5,7 @@
 ## Begin and finishing lines of dialyzer output:
 Checking whether the PLT.+
 Proceeding with analysis.+
+.*done .*passed successfully.*
 
 ## Dialyzer related lines:
 ^ done in .+

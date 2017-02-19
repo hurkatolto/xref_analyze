@@ -10,7 +10,8 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    xref_analyze_sup:start_link().
+%%    xref_analyze_sup:start_link().
+    {ok, self()}.
 
 stop(_State) ->
     ok.

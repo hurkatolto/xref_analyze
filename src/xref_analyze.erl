@@ -5,7 +5,8 @@
 
 -export([main/1]).
 
--export([analyze_mods/2,
+-export([analyze_mods/1,
+         analyze_mods/2,
          analyze_mods/3,
          analyze_code/3,
          analyze_code/4,
@@ -18,7 +19,9 @@
          get_dep_modules/2]).
 
 
--type opts() :: list(include_sub | highlight_pure_functions | generate_clusters | use_multiple_lines).
+-type option_key() :: include_sub | highlight_pure_functions | generate_clusters | use_multiple_lines.
+-type option() :: {option_key(), term()}.
+-type options() :: list(option()).
 
 -define(DEF_OPTS,
         [include_sub, highlight_pure_functions, generate_clusters]).
@@ -53,37 +56,37 @@ main(ModNames) ->
     Res = [code:add_pathz(Dir) || Dir <- Dirs],
     analyze_mods("xref_analyze", Mods, [{use_multiple_lines, true}]).
 
--spec analyze_mods(Modules :: list(module())) -> ok.
+-spec analyze_mods(Modules :: list(module())) -> string().
 analyze_mods(Modules) ->
     analyze_code(lists:flatten(get_all_exported(Modules)), Modules).
 
--spec analyze_mods(OutFileName :: string(), Modules :: list(module())) -> ok.
+-spec analyze_mods(OutFileName :: string(), Modules :: list(module())) -> string().
 analyze_mods(OutFileName, Modules) ->
     analyze_code(OutFileName, lists:flatten(get_all_exported(Modules)), Modules).
 
 -spec analyze_mods(
     OutFileName :: string(),
     Modules :: list(module()),
-    Opts :: opts()
-) -> ok.
+    Opts :: options()
+) -> string().
 analyze_mods(OutFileName, Modules, Opts) ->
     analyze_code(OutFileName, lists:flatten(get_all_exported(Modules)), Opts, Modules).
 
--spec analyze_code(Entries :: list(mfa()), Mods :: list(atom())) -> ok.
+-spec analyze_code(Entries :: list(mfa()), Mods :: list(atom())) -> string().
 analyze_code(Entries, Modules) ->
     analyze(Modules, ?DEFAULT_OUTPUT, Entries, ?DEF_OPTS).
 
 -spec analyze_code(OutFileName :: string(), Entries :: list(mfa()), Modules :: [atom()]) ->
-    ok.
+    string().
 analyze_code(OutFileName, Entries, Modules) ->
     analyze(Modules, OutFileName, Entries, ?DEF_OPTS).
 
 -spec analyze_code(
     OutFileName :: string(),
     Entries :: list(mfa()),
-    Opts :: opts(),
+    Opts :: options(),
     Modules :: list(atom())
-) ->  ok.
+) ->  string().
 analyze_code(OutFileName, Entries, Opts, Modules) ->
     analyze(Modules, OutFileName, Entries, Opts).
 
