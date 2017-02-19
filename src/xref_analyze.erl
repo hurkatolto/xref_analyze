@@ -19,13 +19,15 @@
          get_dep_modules/2]).
 
 
--type option_key() :: include_sub | highlight_pure_functions | generate_clusters.
+-type option_key() :: include_sub | highlight_pure_functions |
+                      generate_clusters | separate_entries.
 -type option() :: {option_key(), term()}.
 -type options() :: list(option()).
 
 -define(DEF_OPTS,
         [include_sub, highlight_pure_functions, generate_clusters]).
 -define(DEFAULT_OUTPUT, "xref_functions").
+-define(DEFAULT_SEPARATE_ENTRIES, true).
 -define(SENDING_FUNCTIONS, [{gen_server, call, 2},
                             {gen_server, call, 3},
                             {gen_server, multi_call, 2},
@@ -132,15 +134,12 @@ analyze(Modules, OutFileName, Entries, Opts) ->
     [xref:add_module(s, M) || M <- Modules],
     Highlight = lists:member(highlight_pure_functions, Opts),
     CallGraphs0 = [{highlight(Entry, Highlight, Modules), walk_call_graph(Entry, Modules, Opts, [])} || Entry <- Entries],
-    {_, CallGraphs} = delete_duplicates(undefined, CallGraphs0, [], []),
-    PureFunctionsRepr = lists:flatten(render_pure_functions(CallGraphs)),
-    ClusterRepr = lists:flatten(generate_clusters(CallGraphs, Opts, Modules)),
-    DotRepr = lists:flatten(generate_dot_repr(CallGraphs)),
+    generate_tree_file(CallGraphs0, OutFileName),
+    SepEntries = proplists:get_value(separate_entries, Opts, ?DEFAULT_SEPARATE_ENTRIES),
     Output =
-        "digraph G {\n" ++ ClusterRepr ++ PureFunctionsRepr ++ DotRepr ++ "\n}",
+        generate_digraph_output(SepEntries, CallGraphs0, Opts, Modules),
     generate_dot_output(OutFileName, Output),
     generate_ps_file(OutFileName),
-    generate_tree_file(CallGraphs0, OutFileName),
     try_show_ps_file(OutFileName).
 
 %%% ---------------------------------------------------------------------------
@@ -296,11 +295,11 @@ generate_dot_output(OutFile0, Output) ->
 
 generate_ps_file(OutFile) ->
     GvName = OutFile ++ ".gv",
-    PsName = OutFile ++ ".png",
-    Cmd = "dot -x -Tpng  -Gratio=auto -Gdpi=340 " ++ GvName ++ " -o " ++ PsName,
+    PsName = OutFile ++ ".ps",
+    Cmd = "dot -x -Tps2  -Gratio=auto -Gdpi=40 " ++ GvName ++ " -o " ++ PsName,
     io:format("~p ~p Cmd: '~p' ~n", [?MODULE, ?LINE, Cmd]),
     Res = os:cmd(Cmd),
-    io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res]),
+    io:format("~p ~p Res: '~s' ~n", [?MODULE, ?LINE, Res]),
     Res.
 
 try_show_ps_file(OutFile) ->
@@ -399,3 +398,42 @@ delete_duplicates(Prev, [{{Edge, IsPure}, Edges}  | T], DrawnEdges0, Res) ->
         true ->
             delete_duplicates(Prev, T, DrawnEdges, Res)
     end.
+
+get_nodes_header(Entries) ->
+    "\t{\n" ++ node_entry_fmt() ++ get_nodes_header1(Entries, []) ++ "\t}\n".
+
+get_nodes_header1([], Res) ->
+    Res;
+get_nodes_header1([Entry], Res) ->
+    Res ++ get_node_header(Entry);
+get_nodes_header1([Entry | T], Res) ->
+    get_nodes_header1(T, Res ++ get_node_header(Entry)).
+
+get_node_header(Entry) ->
+    "\t\t" ++ fmt(Entry) ++ " [fillcolor=red]\n".
+
+node_entry_fmt() ->
+    "\t\tnode [margin=0 fontcolor=blue fontsize=22 width=0.5 shape=ellipse style=filled]\n".
+
+generate_digraph_output(true, CallGraphs, Opts, Modules) ->
+    lists:map(fun(Graph) ->
+            generate_digraph_output([Graph], Opts, Modules)
+        end, CallGraphs);
+generate_digraph_output(false, CallGraphs, Opts, Modules) ->
+    generate_digraph_output(CallGraphs, Opts, Modules).
+
+generate_digraph_output(CallGraphs0, Opts, Modules) ->
+    Entries = get_entries_from_graph(CallGraphs0),
+    io:format("~p ~p generate_digraph_output: '~p' ~n", [?MODULE, ?LINE, generate_digraph_output]),
+    timer:sleep(100),
+    {_, CallGraphs} = delete_duplicates(undefined, CallGraphs0, [], []),
+    PureFunctionsRepr = lists:flatten(render_pure_functions(CallGraphs)),
+    ClusterRepr = lists:flatten(generate_clusters(CallGraphs, Opts, Modules)),
+    DotRepr = lists:flatten(generate_dot_repr(CallGraphs)),
+    NodesHeader = get_nodes_header(Entries),
+    Output =
+        "digraph G {\n" ++ NodesHeader ++ ClusterRepr ++ PureFunctionsRepr ++ DotRepr ++ "\n}\n\n",
+    Output.
+
+get_entries_from_graph(Graphs) ->
+    [E || {{E, _IsPure}, _} <- Graphs].

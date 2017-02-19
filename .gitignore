@@ -10,5 +10,6 @@ ebin/xref_analyze.app
 erltags
 ebin/xref_*.gv
 ebin/xref_*.png
+ebin/xref_*.ps
 ebin/xref_*.txt
 src/proba.erl
