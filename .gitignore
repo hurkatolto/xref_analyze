@@ -13,3 +13,4 @@ ebin/xref_*.png
 ebin/xref_*.ps
 ebin/xref_*.txt
 src/proba.erl
+doc/*

@@ -1,0 +1,133 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module xref_analyze</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module xref_analyze</h1>
+<ul class="index"><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+
+<p><b>Authors:</b> Laszlo Toth
+   ---------------------------------------------------------------------------.</p>
+
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-option">option()</a></h3>
+<p><tt>option() = {<a href="#type-option_key">option_key()</a>, term()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-option_key">option_key()</a></h3>
+<p><tt>option_key() = include_sub | highlight_pure_functions | generate_clusters | separate_entries</tt></p>
+
+
+<h3 class="typedecl"><a name="type-options">options()</a></h3>
+<p><tt>options() = [<a href="#type-option">option()</a>]</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#analyze-3">analyze/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_all-2">analyze_all/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_all-3">analyze_all/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_all_modules-2">analyze_all_modules/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_all_modules-3">analyze_all_modules/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_code-3">analyze_code/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_code-4">analyze_code/4</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_mods-1">analyze_mods/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_mods-2">analyze_mods/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#analyze_mods-3">analyze_mods/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_dep_modules-2">get_dep_modules/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_deps-1">get_deps/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#main-1">main/1</a></td><td>.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="analyze-3">analyze/3</a></h3>
+<div class="spec">
+<p><tt>analyze(Modules, OutFileName, Entries) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="analyze_all-2">analyze_all/2</a></h3>
+<div class="spec">
+<p><tt>analyze_all(Modules, OutFileName) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="analyze_all-3">analyze_all/3</a></h3>
+<div class="spec">
+<p><tt>analyze_all(Modules, OutFileName, Opts) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="analyze_all_modules-2">analyze_all_modules/2</a></h3>
+<div class="spec">
+<p><tt>analyze_all_modules(Modules, OutFileName) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="analyze_all_modules-3">analyze_all_modules/3</a></h3>
+<div class="spec">
+<p><tt>analyze_all_modules(Modules, OutFileName, Opts) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="analyze_code-3">analyze_code/3</a></h3>
+<div class="spec">
+<p><tt>analyze_code(OutFileName::string(), Entries::[mfa()], Modules::[atom()]) -&gt; string()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="analyze_code-4">analyze_code/4</a></h3>
+<div class="spec">
+<p><tt>analyze_code(OutFileName::string(), Entries::[mfa()], Opts::<a href="#type-options">options()</a>, Modules::[atom()]) -&gt; string()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="analyze_mods-1">analyze_mods/1</a></h3>
+<div class="spec">
+<p><tt>analyze_mods(Modules::[module()]) -&gt; string()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="analyze_mods-2">analyze_mods/2</a></h3>
+<div class="spec">
+<p><tt>analyze_mods(OutFileName::string(), Modules::[module()]) -&gt; string()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="analyze_mods-3">analyze_mods/3</a></h3>
+<div class="spec">
+<p><tt>analyze_mods(OutFileName::string(), Modules::[module()], Opts::<a href="#type-options">options()</a>) -&gt; string()</tt><br></p>
+</div>
+
+<h3 class="function"><a name="get_dep_modules-2">get_dep_modules/2</a></h3>
+<div class="spec">
+<p><tt>get_dep_modules(T, Path) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="get_deps-1">get_deps/1</a></h3>
+<div class="spec">
+<p><tt>get_deps(Modules) -&gt; any()</tt></p>
+</div>
+
+<h3 class="function"><a name="main-1">main/1</a></h3>
+<div class="spec">
+<p><tt>main(ModNames) -&gt; any()</tt></p>
+</div><p>
+  <p>
+  Generate callgraphs for the given modules and function entries. The functions
+  given to the escript should be exported. If no functions are given, then
+  all exported functions will be drawn.
+  </p>
+ 
+  <p>
+  Usage:
+  </p>
+ 
+  <p><code>
+  xref_analyze Beam_modules --opts="opt=val,..." --entries="module:function/arity,..."
+  </code></p>
+ </p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc, Feb 19 2017, 20:00:14.</i></p>
+</body>
+</html>

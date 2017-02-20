@@ -1,0 +1,3 @@
+%% encoding: UTF-8
+{application,xref_analyze}.
+{modules,[proba,xref_analyze_app]}.

@@ -52,11 +52,38 @@
 %%% API
 %%% ---------------------------------------------------------------------------
 
-main(ModNames) ->
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% <p>
+%% Generate callgraphs for the given modules and function entries. The functions
+%% given to the escript should be exported. If no functions are given, then
+%% all exported functions will be drawn.
+%% </p>
+%%
+%% <p>
+%% Usage:
+%% </p>
+%%
+%% <p><code>
+%% xref_analyze Beam_modules --opts="opt=val,..." --entries="module:function/arity,..."
+%% </code></p>
+%%
+%% @end
+%%------------------------------------------------------------------------------
+main(Parameters) ->
+    io:format("~p ~p Parameters: '~p' ~n", [?MODULE, ?LINE, Parameters]),
+    {ModNames, Opts, Entries} = parse_args(Parameters),
+    io:format("~p ~p {ModNames, Opts, Entries}: '~p' ~n", [?MODULE, ?LINE, {ModNames, Opts, Entries}]),
     {Dirs, Mods} = get_dirs_and_mods(ModNames),
     io:format("~p ~p {Dirs, Mods}: '~p' ~n", [?MODULE, ?LINE, {Dirs, Mods}]),
-    [code:add_pathz(Dir) || Dir <- Dirs],
-    analyze_mods("xref_analyze", Mods, []).
+    [code:add_patha(Dir) || Dir <- Dirs],
+    [{module, _} = code:load_file(M) || M <- Mods],
+    Entries1 = case Entries of
+                    [] -> lists:flatten(get_all_exported(Mods));
+                    _ -> Entries
+                end,
+    analyze_code("xref_analyze", Entries1, Opts, Mods).
 
 -spec analyze_mods(Modules :: list(module())) -> string().
 analyze_mods(Modules) ->
@@ -437,3 +464,31 @@ generate_digraph_output(CallGraphs0, Opts, Modules) ->
 
 get_entries_from_graph(Graphs) ->
     [E || {{E, _IsPure}, _} <- Graphs].
+
+parse_args(Parameters) ->
+    parse_args(Parameters, [], [], []).
+
+parse_args([], Mods, Opts, Entries) ->
+    {Mods, Opts, Entries};
+parse_args([[$-, $-, $o, $p, $t, $s, $= | Options] | T], Mods, Opts, Entries) ->
+    parse_args(T, Mods, parse_opts(Options) ++ Opts, Entries);
+parse_args([[$-, $-, $e, $n, $t, $r, $i, $e, $s, $= | EntryStrings] | T], Mods, Opts, Entries) ->
+    parse_args(T, Mods, Opts, parse_entries(EntryStrings) ++ Entries);
+parse_args([Module | T], Mods, Opts, Entries) ->
+    io:format("~p ~p Module: '~p' ~n", [?MODULE, ?LINE, Module]),
+    parse_args(T, [Module | Mods], Opts, Entries).
+
+parse_opts(Opts) ->
+    Opts1 = string:tokens(Opts, ","),
+    lists:map(fun(Opt) ->
+            [OptName, OptVal] = string:tokens(Opt, "="),
+            {list_to_atom(OptName), list_to_atom(OptVal)}
+        end, Opts1).
+
+parse_entries(Entries) ->
+    Entries1 = string:tokens(Entries, ","),
+    lists:map(fun(Entry) ->
+            [Module, FunctionArity] = string:tokens(Entry, ":"),
+            [Function, Arity] = string:tokens(FunctionArity, "/"),
+            {list_to_atom(Module), list_to_atom(Function), list_to_integer(Arity)}
+        end, Entries1).
