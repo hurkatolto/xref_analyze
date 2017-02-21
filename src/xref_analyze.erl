@@ -5,17 +5,19 @@
 
 -export([main/1]).
 
--type option_key() :: include_sub | highlight_pure_functions |
-                      generate_clusters | separate_entries | temp_dir.
--type option() :: {option_key(), term()}.
--type options() :: list(option()).
+-type option_type() :: boolean | integer | string | float | atom.
+-type option_key()  :: include_sub | highlight_pure_functions |
+                       generate_clusters | separate_entries | temp_dir.
+-type option()      :: {option_key(), term()}.
+-type options()     :: list(option()).
 
 -define(DEF_TEMP_DIR, "/tmp/xmerl_analyze").
 
--define(DEF_OPTS,
-        [include_sub, highlight_pure_functions, generate_clusters]).
 -define(DEFAULT_OUTPUT, "xref_functions").
 -define(DEFAULT_SEPARATE_ENTRIES, true).
+-define(DEF_INCLUDE_SUB, false).
+-define(DEF_HIGHLIGHT_PURE_FUNCTIONS, true).
+-define(DEF_GENERATE_CLUSTERS, true).
 -define(SENDING_FUNCTIONS, [{gen_server, call, 2},
                             {gen_server, call, 3},
                             {gen_server, multi_call, 2},
@@ -39,7 +41,6 @@
 %%% ---------------------------------------------------------------------------
 %%% API
 %%% ---------------------------------------------------------------------------
-
 
 %%------------------------------------------------------------------------------
 %% @doc
@@ -106,8 +107,8 @@ walk_call_graph({_, module_info, _}, _Modules, _Opts, _CallPath) ->
     [];
 walk_call_graph(MFAs, Modules, Opts, CallPath) ->
     {ok, Functions} = xref:analyze(s, {call, MFAs}),
-    IncludeSub = lists:member(include_sub, Opts),
-    Highlight = lists:member(highlight_pure_functions, Opts),
+    IncludeSub = proplists:get_value(include_sub, Opts, ?DEF_INCLUDE_SUB),
+    Highlight = proplists:get_value(highlight_pure_functions, Opts, ?DEF_HIGHLIGHT_PURE_FUNCTIONS),
 
     Res =
         lists:foldl(fun({M, _F, _A} = Function, Acc) ->
@@ -279,10 +280,9 @@ fmt_line({{M,F,A}, _IsHighlighted}, D) ->
             io_lib:format("~p,~p/~p~n", [M,F,A])
     ).
 
-
 generate_clusters(CallGraphs, Opts, InternalModules) ->
-    GenerateClusters = lists:member(generate_clusters, Opts),
-    IncludeSub = lists:member(include_sub, Opts),
+    GenerateClusters = proplists:get_value(generate_clusters, Opts, ?DEF_GENERATE_CLUSTERS),
+    IncludeSub = proplists:get_value(include_sub, Opts, ?DEF_INCLUDE_SUB),
     case GenerateClusters andalso IncludeSub of
         true ->
             "    subgraph cluster0 {\n" ++
@@ -411,7 +411,8 @@ parse_opts(Opts) ->
     Opts1 = string:tokens(Opts, ","),
     lists:map(fun(Opt) ->
             [OptName, OptVal] = string:tokens(Opt, "="),
-            {list_to_atom(OptName), list_to_atom(OptVal)}
+            OptKey = list_to_atom(OptName),
+            {OptKey, convert_opt(OptKey, OptVal)}
         end, Opts1).
 
 parse_entries(Entries) ->
@@ -438,3 +439,29 @@ copy_beams_to_temp(Opts, DirsAndMods) ->
 
 delete_temp_dir(Dir) ->
     os:cmd("rm -rf " ++ Dir).
+
+-spec opt_types() ->
+    list({option_key(), option_type()}).
+opt_types() ->
+    [{include_sub, boolean},
+     {highlight_pure_functions, boolean},
+     {generate_clusters, boolean},
+     {separate_entries, boolean},
+     {temp_dir, string}].
+
+-spec convert_opt(atom(), string()) ->
+    term().
+convert_opt(Key, Value) ->
+    case lists:keyfind(Key, 1, opt_types()) of
+        false ->
+            throw({bad_option, Key, Value});
+        {_Key, Type} ->
+            convert_option(Type, Value)
+    end.
+
+-spec convert_option(option_type(), string()) ->
+    term().
+convert_option(string, V) ->
+    V;
+convert_option(boolean, V) ->
+    list_to_atom(V).

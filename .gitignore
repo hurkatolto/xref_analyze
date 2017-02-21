@@ -15,6 +15,6 @@ ebin/xref_*.txt
 xref_*.gv
 xref_*.png
 xref_*.ps
-xref_*.txt
+xref_an*.txt
 src/proba.erl
 doc/*
