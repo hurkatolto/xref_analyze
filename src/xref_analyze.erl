@@ -5,24 +5,12 @@
 
 -export([main/1]).
 
--export([analyze_mods/1,
-         analyze_mods/2,
-         analyze_mods/3,
-         analyze_code/3,
-         analyze_code/4,
-         analyze/3,
-         analyze_all_modules/2,
-         analyze_all_modules/3,
-         analyze_all/2,
-         analyze_all/3,
-         get_deps/1,
-         get_dep_modules/2]).
-
-
 -type option_key() :: include_sub | highlight_pure_functions |
-                      generate_clusters | separate_entries.
+                      generate_clusters | separate_entries | temp_dir.
 -type option() :: {option_key(), term()}.
 -type options() :: list(option()).
+
+-define(DEF_TEMP_DIR, "/tmp/xmerl_analyze").
 
 -define(DEF_OPTS,
         [include_sub, highlight_pure_functions, generate_clusters]).
@@ -74,97 +62,39 @@
 main(Parameters) ->
     io:format("~p ~p Parameters: '~p' ~n", [?MODULE, ?LINE, Parameters]),
     {ModNames, Opts, Entries} = parse_args(Parameters),
-    io:format("~p ~p {ModNames, Opts, Entries}: '~p' ~n", [?MODULE, ?LINE, {ModNames, Opts, Entries}]),
-    {Dirs, Mods} = get_dirs_and_mods(ModNames),
-    io:format("~p ~p {Dirs, Mods}: '~p' ~n", [?MODULE, ?LINE, {Dirs, Mods}]),
-    [code:add_patha(Dir) || Dir <- Dirs],
+    DirsAndMods = get_dirs_and_mods(ModNames),
+    Mods = [M || {_, M} <- DirsAndMods],
+    {ok, Cwd} = file:get_cwd(),
+    TempDir = copy_beams_to_temp(Opts, DirsAndMods),
     [{module, _} = code:load_file(M) || M <- Mods],
     Entries1 = case Entries of
                     [] -> lists:flatten(get_all_exported(Mods));
                     _ -> Entries
                 end,
-    analyze_code("xref_analyze", Entries1, Opts, Mods).
-
--spec analyze_mods(Modules :: list(module())) -> string().
-analyze_mods(Modules) ->
-    analyze_code(lists:flatten(get_all_exported(Modules)), Modules).
-
--spec analyze_mods(OutFileName :: string(), Modules :: list(module())) -> string().
-analyze_mods(OutFileName, Modules) ->
-    analyze_code(OutFileName, lists:flatten(get_all_exported(Modules)), Modules).
-
--spec analyze_mods(
-    OutFileName :: string(),
-    Modules :: list(module()),
-    Opts :: options()
-) -> string().
-analyze_mods(OutFileName, Modules, Opts) ->
-    analyze_code(OutFileName, lists:flatten(get_all_exported(Modules)), Opts, Modules).
-
--spec analyze_code(Entries :: list(mfa()), Mods :: list(atom())) -> string().
-analyze_code(Entries, Modules) ->
-    analyze(Modules, ?DEFAULT_OUTPUT, Entries, ?DEF_OPTS).
-
--spec analyze_code(OutFileName :: string(), Entries :: list(mfa()), Modules :: [atom()]) ->
-    string().
-analyze_code(OutFileName, Entries, Modules) ->
-    analyze(Modules, OutFileName, Entries, ?DEF_OPTS).
+    analyze_code("xref_analyze", Entries1, Opts, Mods, Cwd),
+    delete_temp_dir(TempDir).
 
 -spec analyze_code(
     OutFileName :: string(),
     Entries :: list(mfa()),
     Opts :: options(),
-    Modules :: list(atom())
+    Modules :: list(atom()),
+    Dir :: string()
 ) ->  string().
-analyze_code(OutFileName, Entries, Opts, Modules) ->
-    analyze(Modules, OutFileName, Entries, Opts).
+analyze_code(OutFileName, Entries, Opts, Modules, Dir) ->
+    analyze(Modules, OutFileName, Entries, Opts, Dir).
 
-analyze(Modules, OutFileName, Entries) ->
-    analyze(Modules, OutFileName, Entries, []).
-
-analyze_all_modules(Modules, OutFileName) ->
-    analyze_all_modules(Modules, OutFileName, []).
-
-analyze_all_modules(Modules, OutFileName, Opts) ->
-    AllModules = get_deps(Modules),
-    Functions = get_all_exported(AllModules),
-    analyze(Modules, OutFileName, Functions, Opts).
-
-analyze_all(Modules, OutFileName) ->
-    analyze_all(Modules, OutFileName, []).
-
-analyze_all(Modules, OutFileName, Opts) ->
-    AllModules = get_deps(Modules),
-    Functions = get_all_exported(Modules),
-    analyze(AllModules, OutFileName, Functions, Opts).
-
-get_deps(Modules) ->
-    xref:start(s),
-    xref:set_default(s, [{verbose, false}, {warnings, false}]),
-    lists:usort(lists:flatten(get_dep_modules(Modules, []))).
-
-get_dep_modules([], _Path) ->
-    [];
-get_dep_modules([Module | T], Path) ->
-    case lists:member(Module, Path) of
-        false ->
-            xref:add_module(s, Module),
-            {ok, CalledMods} = xref:analyze(s, {module_call, Module}),
-            [Module] ++ get_dep_modules(CalledMods, [Module | Path]) ++ get_dep_modules(T, Path);
-        true ->
-            [Module] ++ get_dep_modules(T, Path)
-    end.
-
-analyze(Modules, OutFileName, Entries, Opts) ->
+analyze(Modules, OutFileName, Entries, Opts, Dir) ->
     xref:start(s),
     xref:set_default(s, [{verbose, false}, {warnings, false}]),
     [xref:add_module(s, M) || M <- Modules],
     Highlight = lists:member(highlight_pure_functions, Opts),
     CallGraphs0 = [{highlight(Entry, Highlight, Modules), walk_call_graph(Entry, Modules, Opts, [])} || Entry <- Entries],
-    generate_tree_file(CallGraphs0, OutFileName),
     SepEntries = proplists:get_value(separate_entries, Opts, ?DEFAULT_SEPARATE_ENTRIES),
     Output =
         generate_digraph_output(SepEntries, CallGraphs0, Opts, Modules),
+    file:set_cwd(Dir),
+    generate_tree_file(CallGraphs0, OutFileName),
     generate_dot_output(OutFileName, Output),
     generate_ps_file(OutFileName),
     try_show_ps_file(OutFileName).
@@ -396,22 +326,21 @@ get_mod_functions(Mod) ->
     [{Mod, F, A} || {F, A} <- Mod:module_info(exports)].
 
 -spec get_dirs_and_mods(Names :: list(string())) ->
-    {Dirs :: list(string()), Mods :: list(atom())}.
+    Result :: list({Dir :: string(), Mod :: atom()}).
 get_dirs_and_mods(Names) ->
-    get_dirs_and_mods(Names, [], []).
+    get_dirs_and_mods(Names, []).
 
--spec get_dirs_and_mods(Names, DirsAcc, ModsAcc) -> Res when
+-spec get_dirs_and_mods(Names, Res) -> Result when
       Names :: list(string()),
-      DirsAcc :: list(string()),
-      ModsAcc :: list(atom()),
-      Res :: {list(string()), list(atom())}.
-get_dirs_and_mods([], DirsAcc, ModsAcc) ->
-    {DirsAcc, ModsAcc};
-get_dirs_and_mods([Name | T], DirsAcc, ModsAcc) ->
+      Res :: list({string(), atom()}),
+      Result :: list({string(), atom()}).
+get_dirs_and_mods([], Res) ->
+    Res;
+get_dirs_and_mods([Name | T], Res) ->
     Dir = filename:dirname(Name),
     [Name2 | _] = lists:reverse(string:tokens(Name, "/")),
     [Name3 | _] = string:tokens(Name2, "."),
-    get_dirs_and_mods(T, [Dir | DirsAcc], [list_to_atom(Name3) | ModsAcc]).
+    get_dirs_and_mods(T, [{Dir, list_to_atom(Name3)} | Res]).
 
 delete_duplicates(_Prev, [], DrawnEdges, Res) ->
     {DrawnEdges, Res};
@@ -492,3 +421,20 @@ parse_entries(Entries) ->
             [Function, Arity] = string:tokens(FunctionArity, "/"),
             {list_to_atom(Module), list_to_atom(Function), list_to_integer(Arity)}
         end, Entries1).
+
+-spec copy_beams_to_temp(proplists:proplist(), list({string(), atom()})) ->
+    string().
+copy_beams_to_temp(Opts, DirsAndMods) ->
+    TempDir = proplists:get_value(temp_dir, Opts, ?DEF_TEMP_DIR),
+    file:make_dir(TempDir),
+    lists:foreach(fun({Dir, Mod}) ->
+            File = Dir ++ "/" ++ atom_to_list(Mod) ++ ".beam",
+            io:format("~p ~p File: '~p' ~n", [?MODULE, ?LINE, File]),
+            Res = file:copy(File, TempDir ++ "/" ++ atom_to_list(Mod) ++ ".beam"),
+            io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res])
+        end, DirsAndMods),
+    file:set_cwd(TempDir),
+    TempDir.
+
+delete_temp_dir(Dir) ->
+    os:cmd("rm -rf " ++ Dir).
