@@ -17,3 +17,4 @@ src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_mods/3 is unused export.*
 src/xref_analyze.erl:.+: Warning: xref_analyze:get_dep_modules/2 is unused export.*
 src/xref_analyze.erl:.+: Warning: xref_analyze:get_deps/1 is unused export.*
 src/xref_analyze.erl:.+: Warning: xref_analyze:main/1 is unused export.*
+.+xref_gen_cmd.erl: Warning: xref_gen_cmd:behaviour_info/1 is unused export.+
