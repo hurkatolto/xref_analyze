@@ -1,5 +1,5 @@
 %%% ---------------------------------------------------------------------------
-%%% @author Laszlo Toth
+%%% @author Terry Buhl
 %%% ---------------------------------------------------------------------------
 -module(xref_analyze).
 
@@ -93,7 +93,7 @@ analyze(Modules, OutFileName, Entries, Opts, Dir) ->
     CallGraphs0 = [{highlight(Entry, Highlight, Modules), walk_call_graph(Entry, Modules, Opts, [])} || Entry <- Entries],
     SepEntries = proplists:get_value(separate_entries, Opts, ?DEFAULT_SEPARATE_ENTRIES),
     Output =
-        generate_digraph_output(SepEntries, CallGraphs0, Opts, Modules),
+        generate_digraph_output(SepEntries, CallGraphs0, Opts),
     file:set_cwd(Dir),
     generate_tree_file(CallGraphs0, OutFileName),
     generate_dot_output(OutFileName, Output),
@@ -280,44 +280,15 @@ fmt_line({{M,F,A}, _IsHighlighted}, D) ->
             io_lib:format("~p,~p/~p~n", [M,F,A])
     ).
 
-generate_clusters(CallGraphs, Opts, InternalModules) ->
+generate_clusters(CallGraphs, Opts) ->
     GenerateClusters = proplists:get_value(generate_clusters, Opts, ?DEF_GENERATE_CLUSTERS),
-    IncludeSub = proplists:get_value(include_sub, Opts, ?DEF_INCLUDE_SUB),
-    case GenerateClusters andalso IncludeSub of
+    case GenerateClusters of
         true ->
-            "    subgraph cluster0 {\n" ++
-            "    " ++ display_cluster_mfas(generate_cluster_nodes(CallGraphs, InternalModules)) ++
-                "    }\n";
+            ModuleFunctions = gen_module_funs(CallGraphs),
+            generate_cluster_output(ModuleFunctions);
         false ->
             []
     end.
-
-display_cluster_mfas(Mfas) ->
-    display_cluster_mfas1(lists:usort(Mfas)).
-
-display_cluster_mfas1([]) ->
-    [];
-display_cluster_mfas1([Mfa | T]) ->
-    "    " ++ fmt(Mfa) ++ ";\n" ++ display_cluster_mfas1(T).
-
-generate_cluster_nodes([], _InternalModules) ->
-    [];
-generate_cluster_nodes([{{{M, _, _} = Mfa, _IsPure}, CalledMfas} | T], InternalModules) ->
-    case lists:member(M, InternalModules) of
-        false ->
-            render_cluster_node(Mfa, CalledMfas, InternalModules, T);
-%                generate_cluster_nodes(CalledMfas, InternalModules) ++
-%                generate_cluster_nodes(T, InternalModules);
-        true ->
-            generate_cluster_nodes(CalledMfas, InternalModules) ++
-                generate_cluster_nodes(T, InternalModules)
-    end.
-
-
-render_cluster_node(Mfa, CalledMfas, InternalModules, T) ->
-    [Mfa] ++
-        generate_cluster_nodes(CalledMfas, InternalModules) ++
-        generate_cluster_nodes(T, InternalModules).
 
 get_all_exported(Modules) ->
     [lists:flatten(get_mod_functions(M)) || M <- Modules].
@@ -371,20 +342,19 @@ get_node_header(Entry) ->
 node_entry_fmt() ->
     "\t\tnode [margin=0 fontcolor=blue fontsize=22 width=0.5 shape=ellipse style=filled]\n".
 
-generate_digraph_output(true, CallGraphs, Opts, Modules) ->
+generate_digraph_output(true, CallGraphs, Opts) ->
     lists:map(fun(Graph) ->
-            generate_digraph_output([Graph], Opts, Modules)
+            generate_digraph_output([Graph], Opts)
         end, CallGraphs);
-generate_digraph_output(false, CallGraphs, Opts, Modules) ->
-    generate_digraph_output(CallGraphs, Opts, Modules).
+generate_digraph_output(false, CallGraphs, Opts) ->
+    generate_digraph_output(CallGraphs, Opts).
 
-generate_digraph_output(CallGraphs0, Opts, Modules) ->
+generate_digraph_output(CallGraphs0, Opts) ->
     Entries = get_entries_from_graph(CallGraphs0),
-    io:format("~p ~p generate_digraph_output: '~p' ~n", [?MODULE, ?LINE, generate_digraph_output]),
     timer:sleep(100),
     {_, CallGraphs} = delete_duplicates(undefined, CallGraphs0, [], []),
     PureFunctionsRepr = lists:flatten(render_pure_functions(CallGraphs)),
-    ClusterRepr = lists:flatten(generate_clusters(CallGraphs, Opts, Modules)),
+    ClusterRepr = lists:flatten(generate_clusters(CallGraphs, Opts)),
     DotRepr = lists:flatten(generate_dot_repr(CallGraphs)),
     NodesHeader = get_nodes_header(Entries),
     Output =
@@ -404,7 +374,6 @@ parse_args([[$-, $-, $o, $p, $t, $s, $= | Options] | T], Mods, Opts, Entries) ->
 parse_args([[$-, $-, $e, $n, $t, $r, $i, $e, $s, $= | EntryStrings] | T], Mods, Opts, Entries) ->
     parse_args(T, Mods, Opts, parse_entries(EntryStrings) ++ Entries);
 parse_args([Module | T], Mods, Opts, Entries) ->
-    io:format("~p ~p Module: '~p' ~n", [?MODULE, ?LINE, Module]),
     parse_args(T, [Module | Mods], Opts, Entries).
 
 parse_opts(Opts) ->
@@ -430,7 +399,6 @@ copy_beams_to_temp(Opts, DirsAndMods) ->
     file:make_dir(TempDir),
     lists:foreach(fun({Dir, Mod}) ->
             File = Dir ++ "/" ++ atom_to_list(Mod) ++ ".beam",
-            io:format("~p ~p File: '~p' ~n", [?MODULE, ?LINE, File]),
             Res = file:copy(File, TempDir ++ "/" ++ atom_to_list(Mod) ++ ".beam"),
             io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res])
         end, DirsAndMods),
@@ -465,3 +433,54 @@ convert_option(string, V) ->
     V;
 convert_option(boolean, V) ->
     list_to_atom(V).
+
+gen_module_funs(CallGraphs) ->
+    MFAS = gen_module_funs(CallGraphs, []),
+    lists:foldl(fun add_mfa/2, [], MFAS).
+
+gen_module_funs([], Res) ->
+    Res;
+gen_module_funs([{{MFA, _IsPure}, Children} | T], Res) ->
+   gen_module_funs(T, [MFA] ++ gen_module_funs(Children, []) ++ Res).
+
+add_mfa({Mod, _Fun, _Arity} = MFA, Acc) ->
+    case lists:keyfind(Mod, 1, Acc) of
+        false ->
+            [{Mod, [MFA]} | Acc];
+        {Mod, ModFuns} ->
+            case lists:member(MFA, ModFuns) of
+                false ->
+                    ModFuns2 = [MFA | ModFuns],
+                    NewVal = {Mod, ModFuns2},
+                    lists:keystore(Mod, 1, Acc, NewVal);
+                true ->
+                    Acc
+            end
+    end.
+
+generate_cluster_output(ModFuns) ->
+    generate_cluster_output(ModFuns, [], 0).
+
+generate_cluster_output([], Res, _C) ->
+    lists:reverse(Res);
+generate_cluster_output([{Mod, MFAS} | T], Res, C) ->
+    Fmt =
+      fmt_msg("\tsubgraph ~s {\n"
+        "\t\tstyle=filled;\n"
+        "\t\tcolor=lightgrey;\n"
+        "\t\tnode [style=filled,color=blue];\n"
+        "\t\t~s;\n"
+        "\t\tlabel = \"~p\";\n"
+        "\t}\n\n",
+        ["cluster_" ++ integer_to_list(C), fmt_node_mfas(MFAS, []), Mod]),
+    generate_cluster_output(T, [Fmt | Res], C + 1).
+
+fmt_node_mfas([], Res) ->
+    Res;
+fmt_node_mfas([MFA], Res) ->
+    Res ++ fmt_msg("\"~p\"", [MFA]);
+fmt_node_mfas([MFA | T], Res) ->
+    fmt_node_mfas(T, Res ++ fmt_msg("\"~p\"", [MFA]) ++ " ").
+
+fmt_msg(Fmt, Args) ->
+    lists:flatten(io_lib:format(Fmt, Args)).

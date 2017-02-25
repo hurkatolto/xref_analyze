@@ -2,7 +2,7 @@
 ## Example:
 ## ^cc_snm.erl:.+never.+$
 
-==> xref_analyze.*
+==> xref_analyze.+
 src/proba.erl:.+: Warning: proba:function/0 is unused export.*
 src/xref_analyze.erl:.+: Warning: xref_analyze:analyze/3 is unused export.*
 src/xref_analyze.erl:.+: Warning: xref_analyze:analyze_all/2 is unused export.*
