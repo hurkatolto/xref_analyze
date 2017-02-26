@@ -1,11 +1,66 @@
 %%% ---------------------------------------------------------------------------
 %%% @author Terry Buhl
+%%%
+%%% @doc
+%%% <p>
+%%% Generate callgraphs for the given modules and function entries. The functions
+%%% given to the escript should be exported. If no functions are given, then
+%%% all exported functions will be drawn.
+%%% </p>
+%%%
+%%% <p>
+%%% Usage:
+%%% </p>
+%%%
+%%% <p><code>
+%%% xref_analyze callgraphs Beam_modules --opts="opt=val,..." --entries="module:function/arity,..."
+%%% </code></p>
+%%%
+%%% <p> Options:
+%%% <ul>
+%%%     <li>include_sub (boolean) :</li>
+%%%     <li>highlight_pure_functions (boolean) :</li>
+%%%     <li>generate_clusters (boolean) :
+%%%         display modules in separate subgraphs</li>
+%%%     <li>separate_entries (boolean) :
+%%%         draw separate picture for all exported function calls</li>
+%%%     <li>temp_dir (string):
+%%%         specfies where the modules will be temporarily copied for the
+%%%         time when they are processed</li>
+%%% </ul>
+%%% </p>
+%%% @end
 %%% ---------------------------------------------------------------------------
 -module(xref_cmd_callgraphs).
 
 -include("../include/xref_analyze.hrl").
 
 -behaviour(xref_gen_cmd).
+
+-define(DEFAULT_OUTPUT, "xref_functions").
+-define(DEFAULT_SEPARATE_ENTRIES, true).
+-define(DEF_INCLUDE_SUB, false).
+-define(DEF_HIGHLIGHT_PURE_FUNCTIONS, true).
+-define(DEF_GENERATE_CLUSTERS, true).
+-define(SENDING_FUNCTIONS, [{gen_server, call, 2},
+                            {gen_server, call, 3},
+                            {gen_server, multi_call, 2},
+                            {gen_server, multi_call, 3},
+                            {gen_server, multi_call, 4},
+                            {gen_server, cast, 2},
+                            {gen_server, abcast, 2},
+                            {gen_server, abcast, 3},
+                            {gen_fsm, send_event, 2},
+                            {gen_fsm, send_all_state_event, 2},
+                            {gen_fsm, sync_send_event, 2},
+                            {gen_fsm, sync_send_event, 3},
+                            {gen_fsm, sync_send_all_state_event, 2},
+                            {gen_fsm, sync_send_all_state_event, 3},
+                            {gen_fsm, send_event_after, 2},
+                            {gen_event, notify, 2},
+                            {gen_event, sync_notify, 2},
+                            {gen_event, call, 3},
+                            {gen_event, call, 4}]).
 
 -export([command_name/0,
          execute/1,
@@ -15,29 +70,44 @@
 %%% API
 %%% ---------------------------------------------------------------------------
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Return the name of the command the module implements.
+%% @end
+%%------------------------------------------------------------------------------
 -spec command_name() ->
     string().
 command_name() ->
     "callgraphs".
 
+
+%%------------------------------------------------------------------------------
+%% @doc
+%% Execute command
+%% @end
+%%------------------------------------------------------------------------------
 -spec execute(list(string())) ->
     ok.
 execute(Parameters) ->
-    io:format("~p ~p Parameters: '~p' ~n", [?MODULE, ?LINE, Parameters]),
-    {ModNames, Opts, Entries} = parse_args(Parameters),
-    DirsAndMods = get_dirs_and_mods(ModNames),
+    {ModNames, Opts, Entries} = xref_analyze_lib:parse_args(Parameters, opt_types()),
+    DirsAndMods = xref_analyze_lib:get_dirs_and_mods(ModNames),
     Mods = [M || {_, M} <- DirsAndMods],
     {ok, Cwd} = file:get_cwd(),
-    TempDir = copy_beams_to_temp(Opts, DirsAndMods),
+    TempDir = xref_analyze_lib:copy_beams_to_temp(Opts, DirsAndMods),
     [{module, _} = code:load_file(M) || M <- Mods],
     Entries1 = case Entries of
                     [] -> lists:flatten(get_all_exported(Mods));
                     _ -> Entries
                 end,
     analyze_code("xref_analyze", Entries1, Opts, Mods, Cwd),
-    delete_temp_dir(TempDir),
+    xref_analyze_lib:delete_temp_dir(TempDir),
     ok.
 
+%%------------------------------------------------------------------------------
+%% @doc
+%% Return command help.
+%% @end
+%%------------------------------------------------------------------------------
 usage() ->
     "Generate callgraphs for the given modules and function entries. The functions\n"
     "given to the escript should be exported. If no functions are given, then\n"
@@ -62,8 +132,7 @@ analyze_code(OutFileName, Entries, Opts, Modules, Dir) ->
     analyze(Modules, OutFileName, Entries, Opts, Dir).
 
 analyze(Modules, OutFileName, Entries, Opts, Dir) ->
-    Res = xref:start(s),
-    io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res]),
+    xref:start(s),
     xref:set_default(s, [{verbose, false}, {warnings, false}]),
     [xref:add_module(s, M) || M <- Modules],
     Highlight = lists:member(highlight_pure_functions, Opts),
@@ -270,23 +339,6 @@ get_all_exported(Modules) ->
 get_mod_functions(Mod) ->
     [{Mod, F, A} || {F, A} <- Mod:module_info(exports)].
 
--spec get_dirs_and_mods(Names :: list(string())) ->
-    Result :: list({Dir :: string(), Mod :: atom()}).
-get_dirs_and_mods(Names) ->
-    get_dirs_and_mods(Names, []).
-
--spec get_dirs_and_mods(Names, Res) -> Result when
-      Names :: list(string()),
-      Res :: list({string(), atom()}),
-      Result :: list({string(), atom()}).
-get_dirs_and_mods([], Res) ->
-    Res;
-get_dirs_and_mods([Name | T], Res) ->
-    Dir = filename:dirname(Name),
-    [Name2 | _] = lists:reverse(string:tokens(Name, "/")),
-    [Name3 | _] = string:tokens(Name2, "."),
-    get_dirs_and_mods(T, [{Dir, list_to_atom(Name3)} | Res]).
-
 delete_duplicates(_Prev, [], DrawnEdges, Res) ->
     {DrawnEdges, Res};
 delete_duplicates(Prev, [{{Edge, IsPure}, Edges}  | T], DrawnEdges0, Res) ->
@@ -338,50 +390,6 @@ generate_digraph_output(CallGraphs0, Opts) ->
 get_entries_from_graph(Graphs) ->
     [E || {{E, _IsPure}, _} <- Graphs].
 
-parse_args(Parameters) ->
-    parse_args(Parameters, [], [], []).
-
-parse_args([], Mods, Opts, Entries) ->
-    {Mods, Opts, Entries};
-parse_args([[$-, $-, $o, $p, $t, $s, $= | Options] | T], Mods, Opts, Entries) ->
-    parse_args(T, Mods, parse_opts(Options) ++ Opts, Entries);
-parse_args([[$-, $-, $e, $n, $t, $r, $i, $e, $s, $= | EntryStrings] | T], Mods, Opts, Entries) ->
-    parse_args(T, Mods, Opts, parse_entries(EntryStrings) ++ Entries);
-parse_args([Module | T], Mods, Opts, Entries) ->
-    parse_args(T, [Module | Mods], Opts, Entries).
-
-parse_opts(Opts) ->
-    Opts1 = string:tokens(Opts, ","),
-    lists:map(fun(Opt) ->
-            [OptName, OptVal] = string:tokens(Opt, "="),
-            OptKey = list_to_atom(OptName),
-            {OptKey, convert_opt(OptKey, OptVal)}
-        end, Opts1).
-
-parse_entries(Entries) ->
-    Entries1 = string:tokens(Entries, ","),
-    lists:map(fun(Entry) ->
-            [Module, FunctionArity] = string:tokens(Entry, ":"),
-            [Function, Arity] = string:tokens(FunctionArity, "/"),
-            {list_to_atom(Module), list_to_atom(Function), list_to_integer(Arity)}
-        end, Entries1).
-
--spec copy_beams_to_temp(proplists:proplist(), list({string(), atom()})) ->
-    string().
-copy_beams_to_temp(Opts, DirsAndMods) ->
-    TempDir = proplists:get_value(temp_dir, Opts, ?DEF_TEMP_DIR),
-    file:make_dir(TempDir),
-    lists:foreach(fun({Dir, Mod}) ->
-            File = Dir ++ "/" ++ atom_to_list(Mod) ++ ".beam",
-            Res = file:copy(File, TempDir ++ "/" ++ atom_to_list(Mod) ++ ".beam"),
-            io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res])
-        end, DirsAndMods),
-    file:set_cwd(TempDir),
-    TempDir.
-
-delete_temp_dir(Dir) ->
-    os:cmd("rm -rf " ++ Dir).
-
 -spec opt_types() ->
     list({option_key(), option_type()}).
 opt_types() ->
@@ -390,23 +398,6 @@ opt_types() ->
      {generate_clusters, boolean},
      {separate_entries, boolean},
      {temp_dir, string}].
-
--spec convert_opt(atom(), string()) ->
-    term().
-convert_opt(Key, Value) ->
-    case lists:keyfind(Key, 1, opt_types()) of
-        false ->
-            throw({bad_option, Key, Value});
-        {_Key, Type} ->
-            convert_option(Type, Value)
-    end.
-
--spec convert_option(option_type(), string()) ->
-    term().
-convert_option(string, V) ->
-    V;
-convert_option(boolean, V) ->
-    list_to_atom(V).
 
 gen_module_funs(CallGraphs) ->
     MFAS = gen_module_funs(CallGraphs, []),

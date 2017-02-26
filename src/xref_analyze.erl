@@ -1,5 +1,7 @@
 %%% ---------------------------------------------------------------------------
+%%% @doc
 %%% @author Terry Buhl
+%%% @end
 %%% ---------------------------------------------------------------------------
 -module(xref_analyze).
 
@@ -10,32 +12,19 @@
 %%% ---------------------------------------------------------------------------
 %%% API
 %%% ---------------------------------------------------------------------------
-
-%%------------------------------------------------------------------------------
-%% @doc
-%% <p>
-%% Generate callgraphs for the given modules and function entries. The functions
-%% given to the escript should be exported. If no functions are given, then
-%% all exported functions will be drawn.
-%% </p>
-%%
-%% <p>
-%% Usage:
-%% </p>
-%%
-%% <p><code>
-%% xref_analyze Beam_modules --opts="opt=val,..." --entries="module:function/arity,..."
-%% </code></p>
-%%
-%% @end
-%%------------------------------------------------------------------------------
-
+-spec main(list(string())) ->
+    ok.
 main(Parameters) ->
     io:format("~p ~p main: '~p' ~n", [?MODULE, ?LINE, main]),
     Res = load_modules(),
     io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res]),
     execute_cmd(Parameters).
 
+%%% ---------------------------------------------------------------------------
+%%% Internal functions
+%%% ---------------------------------------------------------------------------
+-spec execute_cmd(list(string())) ->
+    ok.
 execute_cmd([]) ->
     display_usage();
 execute_cmd(["-h"]) ->
@@ -44,7 +33,8 @@ execute_cmd(["--help"]) ->
     display_usage();
 execute_cmd([Cmd | Parameters]) ->
     CmdMod = find_cmd_mod(Cmd),
-    CmdMod:execute(Parameters).
+    CmdMod:execute(Parameters),
+    ok.
 
 -spec cb_modules() ->
     list(module()).
@@ -55,17 +45,13 @@ cb_modules() ->
     boolean().
 is_cmd_module(Mod) ->
     string:str(atom_to_list(Mod), "xref_cmd_") =:= 1 andalso
-        has_functions(Mod, [{command_name, 0}, {execute, 1}]).
+        has_functions(Mod, xref_gen_cmd:behaviour_info(callbacks)).
 
 -spec has_functions(module(), list({module(), integer()})) ->
     boolean().
 has_functions(Mod, Functions) ->
-    io:format("~p ~p {Mod, Functions}: '~p' ~n", [?MODULE, ?LINE, {Mod, Functions}]),
     Exported = Mod:module_info(exports),
-    io:format("~p ~p Exported: '~p' ~n", [?MODULE, ?LINE, Exported]),
-    Res = Functions -- Exported =:= [],
-    io:format("~p ~p Res: '~p' ~n", [?MODULE, ?LINE, Res]),
-    Res.
+    Functions -- Exported =:= [].
 
 -spec display_usage() ->
     ok.
@@ -82,6 +68,7 @@ display_cmds() ->
     lists:map(fun(Mod) ->
             Command = Mod:command_name(),
             Usage = Mod:usage(),
+            "=================================================\n"
             "  - " ++ Command ++ ":\n" ++ Usage ++ "\n\n"
         end, Cmds).
 
@@ -106,14 +93,17 @@ find_commands(Cmd, Cmds) ->
     lists:filter(fun({_Mod, MaybeMatch}) -> string:str(MaybeMatch, Cmd) =:= 1 end,
                  Cmds).
 
-%% TODO:
+%% @TODO:
 %% Don't use the cmd module names here, but load everything in the beam directory,
 %% something like:
+%% @doc
+%% <code>
 %%    BeamDir = filename:dirname(code:which(?MODULE)),
 %%    Mods = modules_in_dir(BeamDir),
-%%    [code:ensure_loaded(M) || M <- Mods].
+%%    [code:ensure_loaded(M) || M - Mods].
+%% </code>
+%% @end
 -spec load_modules() ->
     term().
 load_modules() ->
-    [code:load_file(M) || M <- [xref_cmd_callgraphs]].
-
+    [code:load_file(M) || M <- ?CMD_MODULES].
