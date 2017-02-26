@@ -1,3 +1,5 @@
 %% encoding: UTF-8
 {application,xref_analyze}.
-{modules,[proba,xref_analyze_app]}.
+{modules,[proba,proba2,xref_analyze,xref_analyze_app,xref_analyze_lib,
+          xref_cmd_callgraphs,xref_cmd_external_appcalls,
+          xref_cmd_internal_appcalls,xref_gen_cmd]}.
